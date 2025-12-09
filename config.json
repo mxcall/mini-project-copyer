@@ -1,0 +1,30 @@
+{
+    "TARGET_DIR": "D:\\test_aaa",
+    "SRC_DIR": "D:\\test_bbb",
+    "SRC_PDIR": "D:\\",
+    "SRC_PDIR_PREFIX": [
+        "test_",
+        "test2_"
+    ],
+    "EXCLUDE_DIRS": [
+        ".idea",
+        ".git",
+        "target",
+        "node_modules",
+        ".mvn",
+        ".vscode",
+        "build",
+        ".npm",
+        ".cache",
+        ".project",
+        ".metadata",
+        "kibana",
+        "dist"
+    ],
+    "EXCLUDE_PATTERNS": [
+        "*.log",
+        "hs_err_pid*",
+        "*.iml",
+        "*.tgz"
+    ]
+}
