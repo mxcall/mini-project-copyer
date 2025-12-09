@@ -19,7 +19,12 @@
         ".project",
         ".metadata",
         "kibana",
-        "dist"
+        "dist",
+        ".venv",
+        "jre",
+        "WebContent",
+        "apm_prod_shell",
+        "vendor"
     ],
     "EXCLUDE_PATTERNS": [
         "*.log",

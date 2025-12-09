@@ -27,7 +27,8 @@ DEFAULT_CONFIG = {
     "SRC_PDIR_PREFIX": ["test_", "test2_"],
     "EXCLUDE_DIRS": [
         ".idea", ".git", "target", "node_modules", ".mvn", ".vscode", "build",
-        ".npm", ".cache", ".project", ".metadata", "kibana", "dist", ".venv"
+        ".npm", ".cache", ".project", ".metadata", "kibana", "dist",
+        ".venv", "jre", "WebContent", "apm_prod_shell", "vendor"
     ],
     "EXCLUDE_PATTERNS": ["*.log", "hs_err_pid*", "*.iml", "*.tgz"]
 }
