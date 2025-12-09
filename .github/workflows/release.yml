@@ -37,6 +37,7 @@ jobs:
       with:
         name: mini-project-copyer
         path: dist/mini-project-copyer.exe
+        if-no-files-found: error
         retention-days: 5
 
     - name: Create Release
