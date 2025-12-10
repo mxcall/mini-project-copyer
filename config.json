@@ -1,5 +1,6 @@
 {
     "TARGET_DIR": "D:\\test_aaa",
+    "HTTP_PORT": 10888,
     "SRC_DIR": "D:\\test_bbb",
     "SRC_PDIR": "D:\\",
     "SRC_PDIR_PREFIX": [

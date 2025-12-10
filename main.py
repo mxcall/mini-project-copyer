@@ -18,10 +18,14 @@ from tkinter import messagebox, scrolledtext, font, filedialog
 import threading
 import sys
 import io
+import socket
+from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
+from functools import partial
 
 # 默认配置
 DEFAULT_CONFIG = {
     "TARGET_DIR": "D:\\test_aaa",
+    "HTTP_PORT": 10888,
     "SRC_DIR": "D:\\test_bbb",
     "SRC_PDIR": "D:\\",
     "SRC_PDIR_PREFIX": ["test_", "test2_"],
@@ -65,10 +69,18 @@ class CopyerApp:
         
         # 构建UI
         self.create_widgets()
+
+        # HTTP Server State
+        self.httpd = None
+        self.server_thread = None
+        self.http_server_running = False
         
         # 输出初始化阶段对日志
         self.flush_queued_logs()
         
+        # 绑定关闭事件
+        self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
+
     def load_config(self):
         """加载配置，不存在则使用默认"""
         config_path = Path("config.json")
@@ -115,6 +127,11 @@ class CopyerApp:
         
         exclude_patterns = self.text_exclude_patterns.get("1.0", tk.END).strip().split('\n')
         self.config['EXCLUDE_PATTERNS'] = [p.strip() for p in exclude_patterns if p.strip()]
+
+        try:
+            self.config['HTTP_PORT'] = int(self.entry_http_port.get())
+        except ValueError:
+            self.config['HTTP_PORT'] = 10888 # Fallback
 
     def browse_directory(self, entry_widget):
         """打开文件夹选择框"""
@@ -192,11 +209,21 @@ class CopyerApp:
         self.text_exclude_patterns.pack(fill=tk.BOTH, expand=True, pady=(0, 5)) # 允许垂直扩展
         self.text_exclude_patterns.insert(tk.END, "\n".join(self.config.get('EXCLUDE_PATTERNS', [])))
         
+        # 7. HTTP Port
+        tk.Label(left_frame, text="HTTP端口 (HTTP Port):", font=lbl_font).pack(anchor="w")
+        self.entry_http_port = tk.Entry(left_frame)
+        self.entry_http_port.pack(fill=tk.X, pady=(0, 5))
+        self.entry_http_port.insert(0, str(self.config.get('HTTP_PORT', 10888)))
+        
         # 按钮区域
         btn_frame = tk.Frame(left_frame)
         btn_frame.pack(fill=tk.X, pady=10)
         
         tk.Button(btn_frame, text="保存配置", command=self.save_config, bg="#dddddd").pack(side=tk.LEFT, padx=5)
+        
+        self.btn_http = tk.Button(btn_frame, text="开启HTTP", command=self.toggle_http_server, bg="#2196F3", fg="white", font=lbl_font)
+        self.btn_http.pack(side=tk.LEFT, padx=5)
+
         self.btn_run = tk.Button(btn_frame, text="执行拷贝", command=self.start_copy_thread, bg="#4CAF50", fg="white", font=lbl_font)
         self.btn_run.pack(side=tk.LEFT, padx=5)
         
@@ -260,6 +287,133 @@ class CopyerApp:
         finally:
             sys.stdout = old_stdout
             self.root.after(0, lambda: self.btn_run.config(state=tk.NORMAL, text="执行拷贝"))
+
+    def toggle_http_server(self):
+        """切换HTTP服务状态"""
+        if self.http_server_running:
+            self.stop_http_server()
+        else:
+            self.start_http_server_thread()
+
+    def start_http_server_thread(self):
+        """启动HTTP服务线程"""
+        port = 10888
+        try:
+            port = int(self.entry_http_port.get())
+        except ValueError:
+            self.log_message("HTTP端口无效，使用默认 10888")
+            port = 10888
+            
+        target_dir = self.entry_target_dir.get()
+        if not target_dir or not os.path.exists(target_dir):
+            self.log_message(f"HTTP启动失败: 目标目录不存在 {target_dir}")
+            return
+
+        self.btn_http.config(text="启动中...", state=tk.DISABLED)
+        
+        t = threading.Thread(target=self.run_http_server, args=(target_dir, port))
+        t.daemon = True
+        t.start()
+        self.server_thread = t
+
+    def run_http_server(self, root_dir, port):
+        """HTTP服务运行逻辑"""
+        try:
+            # 定义带日志回调的 Handler
+            class GUIRequestHandler(SimpleHTTPRequestHandler):
+                def log_message(self_handler, format, *args):
+                    msg = "[HTTP] %s - - [%s] %s" % (
+                        self_handler.client_address[0],
+                        self_handler.log_date_time_string(),
+                        format % args
+                    )
+                    # 通过 server 实例回调 app 的日志方法
+                    if hasattr(self_handler.server, 'app_log_callback'):
+                        self_handler.server.app_log_callback(msg)
+
+            class ACThreadingHTTPServer(ThreadingHTTPServer):
+                allow_reuse_address = True
+
+            handler_class = partial(GUIRequestHandler, directory=root_dir)
+            
+            self.httpd = ACThreadingHTTPServer(("0.0.0.0", port), handler_class)
+            self.httpd.app_log_callback = self.log_message_thread_safe
+            
+            self.http_server_running = True
+            
+            # 获取本机IP
+            local_ips = self.get_all_ips()
+            ip_msg = "\n".join([f"  http://{ip}:{port}/" for ip in local_ips])
+            
+            self.root.after(0, lambda: self.btn_http.config(text="关闭HTTP", state=tk.NORMAL, bg="#f44336"))
+            self.log_message_thread_safe(f"HTTP服务已启动. 目标: {root_dir}")
+            self.log_message_thread_safe(f"可访问地址:\n{ip_msg}")
+            
+            self.httpd.serve_forever()
+            
+        except Exception as e:
+            self.log_message_thread_safe(f"HTTP服务启动失败: {e}")
+            self.http_server_running = False
+            self.root.after(0, lambda: self.btn_http.config(text="开启HTTP", state=tk.NORMAL, bg="#2196F3"))
+        finally:
+             if self.httpd:
+                 self.httpd.server_close()
+
+    def stop_http_server(self):
+        """停止HTTP服务"""
+        if self.httpd:
+            self.log_message("正在停止HTTP服务...")
+            # shutdown 需要在独立线程调用，否则会死锁（如果是在 serve_forever 的同一个线程调用）
+            # 但这里是在主线程调用 stop，server 在子线程 serve_forever
+            threading.Thread(target=self.httpd.shutdown).start()
+            
+        self.http_server_running = False
+        self.btn_http.config(text="开启HTTP", bg="#2196F3")
+        self.log_message("HTTP服务已停止。")
+
+    def on_closing(self):
+        """关闭程序前的清理"""
+        if self.http_server_running:
+            try:
+                # 尝试优雅关闭，但不必等待太久以免阻塞退出
+                if self.httpd:
+                   # 强制停止Server
+                   self.httpd.shutdown() 
+                   self.httpd.server_close()
+            except:
+                pass
+        self.root.destroy()
+
+    def log_message_thread_safe(self, msg):
+        """线程安全的日志记录"""
+        self.log_message(msg)
+        
+    def get_all_ips(self):
+        """获取所有非回环的IPV4地址"""
+        ips = []
+        try:
+            # 方法1: 获取所有网卡信息
+            host_name = socket.gethostname() 
+            # gethostbyname_ex 返回 (hostname, aliaslist, ipaddrlist)
+            _, _, ip_list = socket.gethostbyname_ex(host_name)
+            ips = [ip for ip in ip_list if not ip.startswith("127.")]
+        except:
+            pass
+            
+        # 如果获取失败或为空，尝试连接外网探测
+        if not ips:
+            try:
+                s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+                s.connect(("8.8.8.8", 80))
+                ip = s.getsockname()[0]
+                s.close()
+                ips = [ip]
+            except:
+                pass
+        
+        # 始终包含 localhost 方便测试
+        ips.insert(0, "localhost")
+        return list(set(ips)) # 去重
 
 
 # ======================================================================================

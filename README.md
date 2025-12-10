@@ -11,6 +11,7 @@
 1. 打开 `config.json` 文件。
 2. 修改配置项（**注意：路径中的反斜杠 `\` 需要转义，例如 `D:\\path`**）：
    - `TARGET_DIR`: 目标存放目录（必填）。
+   - `HTTP_PORT`: HTTP服务端口，默认 10888。
    - `SRC_PDIR`: 批量扫描的父目录。如果设置此项，将扫描该目录下的子文件夹。
    - `SRC_DIR`: 单个源目录。如果 `SRC_PDIR` 为空，将使用此配置。
    - `SRC_PDIR_PREFIX`: 需要扫描的子目录前缀列表（仅在 `SRC_PDIR` 生效时使用），例如 `["XXX_", "YYY_"]`。
@@ -38,3 +39,4 @@ uv run pyinstaller --onefile --noconsole --name "mini-project-copyer" main.py
 - ✅ **自动备份**：自动添加日期后缀（格式：`原文件夹名_YYYYMMDD`）。
 - ✅ **排除机制**：支持文件夹和文件模式的递归排除。
 - ✅ **安全覆盖**：如果生成的带日期后缀的目标文件夹已存在，会自动清理旧版并重新拷贝。
+- ✅ **HTTP预览**：内置HTTP服务器，可把目标目录映射为Web服务，支持日志查看。
